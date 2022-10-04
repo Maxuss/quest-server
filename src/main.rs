@@ -30,7 +30,13 @@ fn prepare_logging() -> anyhow::Result<()> {
         .with(
             stdout_log
                 .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG)
-                .and_then(file_log),
+                .and_then(file_log)
+                .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
+                    metadata
+                        .module_path()
+                        .unwrap_or("unknown")
+                        .starts_with("quest_server")
+                })),
         )
         .init();
 
