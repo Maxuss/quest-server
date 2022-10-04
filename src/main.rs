@@ -1,52 +1,104 @@
-use log::LevelFilter;
-use log4rs::append::console::ConsoleAppender;
-use log4rs::append::rolling_file::policy::compound::roll::fixed_window::FixedWindowRoller;
-use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
-use log4rs::append::rolling_file::policy::compound::CompoundPolicy;
-use log4rs::append::rolling_file::RollingFileAppender;
-use log4rs::config::{Appender, Logger, Root};
-use log4rs::encode::pattern::PatternEncoder;
-use log4rs::{init_config, Config};
+use std::path::Path;
+
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use sqlx::{ConnectOptions, PgPool};
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::join;
+use tokio::task::JoinHandle;
+use tracing::info;
+use tracing_appender::rolling;
+use tracing_subscriber::prelude::*;
+
+use crate::api::start_api;
+use crate::telegram::start_telegram;
+
+pub mod api;
+pub mod telegram;
 
 fn prepare_logging() -> anyhow::Result<()> {
-    let pattern = "[{d(%d-%m-%Y %H:%M:%S)}] {h(\\({l}\\))}: {m}\n";
+    let appender = rolling::minutely("logs/", "latest.log");
 
-    let stdout = ConsoleAppender::builder()
-        .encoder(Box::new(PatternEncoder::new(pattern)))
-        .build();
+    let stdout_log = tracing_subscriber::fmt::layer().pretty();
+    let file_log = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_writer(appender);
 
-    let logfile = RollingFileAppender::builder()
-        .encoder(Box::new(PatternEncoder::new(pattern)))
-        .build(
-            "logs/latest.log",
-            Box::new(CompoundPolicy::new(
-                // 4MB
-                Box::new(SizeTrigger::new(4 * 1024)),
-                Box::new(FixedWindowRoller::builder().build("logs/old/{}.log.gz", 4)?),
-            )),
-        )?;
+    tracing_subscriber::registry()
+        .with(
+            stdout_log
+                .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG)
+                .and_then(file_log),
+        )
+        .init();
 
-    let config = Config::builder()
-        .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .logger(Logger::builder().build("cardquest", LevelFilter::Debug))
-        .build(
-            Root::builder()
-                .appender("stdout")
-                .appender("logfile")
-                .build(LevelFilter::Info),
-        )?;
-
-    let _ = init_config(config)?;
     Ok(())
+}
+
+#[tracing::instrument]
+async fn prepare_config() -> anyhow::Result<ServerConfig> {
+    if !Path::new("config.toml").exists() {
+        let mut file = File::create("config.toml").await?;
+        let cfg = ServerConfig::default();
+        file.write_all(toml::to_string_pretty(&cfg)?.as_bytes())
+            .await?;
+
+        info!("Config file was generated, make sure to fill it out!");
+        bail!("Config does not exist!")
+    }
+
+    let mut cfg = File::open("config.toml").await?;
+    let mut buf = String::new();
+    cfg.read_to_string(&mut buf).await?;
+
+    let cfg: ServerConfig = toml::from_str(&buf)?;
+    Ok(cfg)
+}
+
+#[tracing::instrument]
+async fn prepare_db(cfg: &ServerConfig) -> anyhow::Result<PgPool> {
+    let pool = PgPoolOptions::new()
+        .max_connections(4)
+        .connect_with(
+            PgConnectOptions::new()
+                .host(&cfg.postgres.host)
+                .username(&cfg.postgres.username)
+                .password(&cfg.postgres.password)
+                .database(&cfg.postgres.database)
+                .log_statements(tracing::log::LevelFilter::Off)
+                .to_owned(),
+        )
+        .await?;
+    Ok(pool)
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     prepare_logging()?;
 
-    log::info!("Initializing the Cardquest backend...");
+    info!("Initializing the Cardquest backend...");
+
+    let cfg = if let Ok(cfg) = prepare_config().await {
+        cfg
+    } else {
+        return Ok(());
+    };
+
+    let db = prepare_db(&cfg).await?;
+
+    let db_clone = db.clone();
+    let tg_key = cfg.telegram.api_key.clone();
+
+    let telegram_handle: JoinHandle<anyhow::Result<()>> =
+        tokio::task::spawn(async move { start_telegram(tg_key, db_clone).await });
+    let api_handle = tokio::task::spawn(async move { start_api(&cfg, db).await });
+
+    let (tg, api) = join!(telegram_handle, api_handle);
+
+    tg??;
+    api??;
 
     Ok(())
 }
