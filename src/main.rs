@@ -46,7 +46,7 @@ fn prepare_logging() -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     prepare_logging()?;
 
-    log::info!("Initializing Cardquest backend...");
+    log::info!("Initializing the Cardquest backend...");
 
     Ok(())
 }
