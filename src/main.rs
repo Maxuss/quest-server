@@ -10,12 +10,15 @@ use tokio::join;
 use tokio::task::JoinHandle;
 use tracing::info;
 use tracing_appender::rolling;
+use tracing_log::LogTracer;
 use tracing_subscriber::prelude::*;
 
 use crate::api::start_api;
+use crate::common::fs::prepare_fs;
 use crate::telegram::start_telegram;
 
 pub mod api;
+pub mod common;
 pub mod telegram;
 
 fn prepare_logging() -> anyhow::Result<()> {
@@ -85,6 +88,8 @@ async fn main() -> anyhow::Result<()> {
     prepare_logging()?;
 
     info!("Initializing the Cardquest backend...");
+
+    prepare_fs().await?;
 
     let cfg = if let Ok(cfg) = prepare_config().await {
         cfg

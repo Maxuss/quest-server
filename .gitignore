@@ -47,3 +47,4 @@ Cargo.lock
 # other stuff
 logs
 config.toml
+data
