@@ -10,7 +10,6 @@ use tokio::join;
 use tokio::task::JoinHandle;
 use tracing::info;
 use tracing_appender::rolling;
-use tracing_log::LogTracer;
 use tracing_subscriber::prelude::*;
 
 use crate::api::start_api;
