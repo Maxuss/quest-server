@@ -8,7 +8,7 @@ use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ParseMode},
 };
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::common::{data::RegStageUser, fs::create};
 
@@ -47,7 +47,12 @@ pub fn player_schema() -> UpdateHandler<anyhow::Error> {
                 .branch(case![Command::Register(token)].endpoint(register)),
         )
         .branch(case![Command::Help].endpoint(help))
-        .branch(case![Command::Cancel].endpoint(cancel));
+        .branch(case![Command::Cancel].endpoint(cancel))
+        .branch(
+            case![crate::telegram::Command::CreateQuest { name, assign_to }]
+                .endpoint(super::spectator::create_quest),
+        )
+        .branch(case![Command::Acknowledge { quest_id }].endpoint(super::spectator::acknowledge));
 
     let message_handler = Update::filter_message()
         .branch(command_handler)
@@ -81,10 +86,11 @@ async fn help(bot: AutoSend<Bot>, msg: Message) -> anyhow::Result<()> {
         r#"
 /help - Показывает это сообщение.
 /start - Основная информация о боте.
-`/register <token>` - Начинает процесс регистрации. Замените `<token>` на ваш токен регистрации
+<code>/register &lt;token&gt;</code> - Начинает процесс регистрации. Замените <code>&lt;token&gt;</code> на ваш токен регистрации.
 /cancel - Отменяет процесс регистрации.
 "#,
     )
+    .parse_mode(ParseMode::Html)
     .await?;
     Ok(())
 }

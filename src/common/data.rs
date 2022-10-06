@@ -13,7 +13,7 @@ pub struct User {
     pub card_hash: String,
     pub id: Uuid,
     pub username: String,
-    pub telegram_chat_id: i64,
+    pub telegram_chat_id: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

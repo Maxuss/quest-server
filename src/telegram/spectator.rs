@@ -1,6 +1,5 @@
 use sqlx::PgPool;
-use teloxide::dispatching::UpdateHandler;
-use teloxide::dptree::case;
+
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
 use tracing::debug;
@@ -8,26 +7,14 @@ use uuid::Uuid;
 
 use crate::common::data::{LingeringTask, User};
 
-use super::Command;
-
-pub fn spectator_schema() -> UpdateHandler<anyhow::Error> {
-    let command_handler = teloxide::filter_command::<Command, _>()
-        .branch(
-            case![crate::telegram::Command::CreateQuest { name, assign_to }].endpoint(create_quest),
-        )
-        .branch(case![Command::Acknowledge { quest_id }].endpoint(acknowledge));
-
-    Update::filter_message().branch(command_handler)
-}
-
 #[tracing::instrument(skip(bot, msg, pool))]
-async fn acknowledge(
+pub async fn acknowledge(
     bot: AutoSend<Bot>,
     msg: Message,
     pool: PgPool,
     quest_id: Uuid,
 ) -> anyhow::Result<()> {
-    let quest = sqlx::query_as::<_, LingeringTask>("SELECT * FROM lingering_tasks WHERE id = $1")
+    let quest = sqlx::query_as::<_, LingeringTask>("SELECT * FROM lingering_quests WHERE id = $1")
         .bind(&quest_id)
         .fetch_optional(&pool)
         .await?;
@@ -43,7 +30,7 @@ async fn acknowledge(
 
     debug!("Acknowledging quest {quest_id}!");
 
-    sqlx::query("DELETE FROM lingering_tasks WHERE id = $1")
+    sqlx::query("DELETE FROM lingering_quests WHERE id = $1")
         .bind(&quest_id)
         .execute(&pool)
         .await?;
@@ -55,7 +42,7 @@ async fn acknowledge(
 }
 
 #[tracing::instrument(skip(bot, msg, pool))]
-async fn create_quest(
+pub async fn create_quest(
     bot: AutoSend<Bot>,
     msg: Message,
     pool: PgPool,
@@ -78,12 +65,13 @@ async fn create_quest(
 
     let task_id = Uuid::new_v4();
 
-    sqlx::query("INSERT INTO lingering_tasks VALUES($1, $2, $3)")
+    sqlx::query("INSERT INTO lingering_quests VALUES($1, $2, $3)")
         .bind(&task_id)
         .bind(user.card_hash)
         .bind(&name)
         .execute(&pool)
-        .await?;
+        .await
+        .unwrap();
 
     bot.send_message(
         msg.chat.id,

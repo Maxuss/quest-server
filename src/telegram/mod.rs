@@ -1,13 +1,12 @@
 use sqlx::PgPool;
 use teloxide::{
     dispatching::{dialogue::InMemStorage, UpdateHandler},
-    error_handlers::ErrorHandler,
     prelude::*,
     utils::command::BotCommands,
 };
 use uuid::Uuid;
 
-use self::{player::player_schema, spectator::spectator_schema};
+use self::player::player_schema;
 
 mod player;
 mod spectator;
