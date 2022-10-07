@@ -1,27 +1,13 @@
 use std::{net::SocketAddr, str::FromStr};
 
-use axum::{routing::post, Extension, Json, Router};
-use serde::{Deserialize, Serialize};
+use axum::{routing::post, Extension, Router};
+
 use sqlx::PgPool;
-use tracing::info;
 
-use crate::ServerConfig;
+use crate::{api::auth::stage1_register, ServerConfig};
 
-use self::model::Payload;
-
+mod auth;
 pub mod model;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TestData {
-    hello: String,
-    world: String,
-}
-
-#[tracing::instrument]
-async fn test_post(Json(data): Json<TestData>) -> Payload<TestData> {
-    info!("Echoing data!");
-    Payload(data)
-}
 
 #[tracing::instrument(skip_all)]
 pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
@@ -29,7 +15,7 @@ pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
     tracing::info!("Starting HTTP server on {}", addr);
 
     let router = Router::new()
-        .route("/test_post", post(test_post))
+        .route("/user/register", post(stage1_register))
         .layer(Extension(db));
 
     axum::Server::bind(&addr)

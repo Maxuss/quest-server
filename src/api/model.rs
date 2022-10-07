@@ -1,4 +1,4 @@
-#![allow(non_snake_case)]
+#![allow(non_snake_case, non_camel_case_types)]
 
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::{ser::SerializeStruct, Serialize};
@@ -67,7 +67,10 @@ error_types! {
     UNKNOWN(String),
 
     #[error("Anyhow provoked error has occurred: {0}")]
-    PROVOKED(#[from] anyhow::Error)
+    PROVOKED(#[from] anyhow::Error),
+
+    #[error("An SQL provoked error has occurred: {0}")]
+    SQL_ERROR(#[from] sqlx::Error)
 }
 
 #[derive(Debug, Serialize)]
