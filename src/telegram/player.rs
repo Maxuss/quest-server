@@ -80,7 +80,7 @@ pub fn player_schema() -> UpdateHandler<anyhow::Error> {
         .branch(callback_query_handler)
 }
 
-async fn help(bot: AutoSend<Bot>, msg: Message) -> anyhow::Result<()> {
+async fn help(bot: Bot, msg: Message) -> anyhow::Result<()> {
     bot.send_message(
         msg.chat.id,
         r#"
@@ -95,7 +95,7 @@ async fn help(bot: AutoSend<Bot>, msg: Message) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn start(bot: AutoSend<Bot>, msg: Message) -> anyhow::Result<()> {
+async fn start(bot: Bot, msg: Message) -> anyhow::Result<()> {
     bot.send_message(
         msg.chat.id,
         r#"Этот бот позволяет вам регистрироваться на квест\.
@@ -110,7 +110,7 @@ async fn start(bot: AutoSend<Bot>, msg: Message) -> anyhow::Result<()> {
 
 #[tracing::instrument(skip(bot, msg, dialogue, pool))]
 pub async fn register(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     msg: Message,
     dialogue: RegisterDialogue,
     token: String,
@@ -166,7 +166,7 @@ pub async fn register(
 
 #[tracing::instrument(skip(bot, msg, dialogue, pool))]
 async fn get_username(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     msg: Message,
     dialogue: RegisterDialogue,
     pool: PgPool,
@@ -216,7 +216,7 @@ fn make_avatar_keyboard(msg: &Message) -> InlineKeyboardMarkup {
 
 #[tracing::instrument(skip(bot, msg, dialogue, pool))]
 async fn get_avatar(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     msg: Message,
     dialogue: RegisterDialogue,
     pool: PgPool,
@@ -227,9 +227,9 @@ async fn get_avatar(
             let photo = photo
                 .first()
                 .ok_or_else(|| anyhow::Error::msg("Image not provided!"))?;
-            let file = bot.get_file(&photo.file_id).await?;
+            let file = bot.get_file(&photo.file.id).await?;
             let mut out = create(format!("data/image/{card_hash}.png")).await?;
-            bot.download_file(&file.file_path, &mut out).await?;
+            bot.download_file(&file.path, &mut out).await?;
 
             finish_registration(bot, msg.chat.id, pool, username, id, card_hash).await?;
 
@@ -246,7 +246,7 @@ async fn get_avatar(
 
 #[tracing::instrument(skip(bot, q, dialogue, pool))]
 async fn get_avatar_callback(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     q: CallbackQuery,
     dialogue: RegisterDialogue,
     pool: PgPool,
@@ -265,7 +265,7 @@ async fn get_avatar_callback(
         };
         let file = bot.get_file(photo.small_file_id).await?;
         let mut out = create(format!("data/image/{card_hash}.png")).await?;
-        bot.download_file(&file.file_path, &mut out).await?;
+        bot.download_file(&file.path, &mut out).await?;
 
         finish_registration(bot, chat_id, pool, username, id, card_hash).await?;
 
@@ -276,7 +276,7 @@ async fn get_avatar_callback(
 
 #[tracing::instrument(skip(bot, id, pool))]
 async fn finish_registration(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     id: ChatId,
     pool: PgPool,
     username: String,
@@ -308,11 +308,7 @@ async fn finish_registration(
 }
 
 #[tracing::instrument(skip_all)]
-async fn cancel(
-    bot: AutoSend<Bot>,
-    msg: Message,
-    dialogue: RegisterDialogue,
-) -> anyhow::Result<()> {
+async fn cancel(bot: Bot, msg: Message, dialogue: RegisterDialogue) -> anyhow::Result<()> {
     tracing::debug!("Registration cancelled!");
     bot.send_message(msg.chat.id, "Регистрация отменена.")
         .await?;

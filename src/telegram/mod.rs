@@ -12,11 +12,7 @@ mod player;
 mod spectator;
 
 #[derive(BotCommands, Clone)]
-#[command(
-    rename = "lowercase",
-    description = "Список комманд бота:",
-    parse_with = "split"
-)]
+#[command(rename_rule = "lowercase", description = "Список комманд бота:")]
 pub enum Command {
     #[command(description = "Показывает это сообщение")]
     Help,
@@ -28,7 +24,7 @@ pub enum Command {
     Cancel,
     #[command(description = "???")]
     Acknowledge { quest_id: Uuid },
-    #[command(description = "???")]
+    #[command(description = "???", parse_with = "split")]
     CreateQuest { name: String, assign_to: String },
 }
 
@@ -37,7 +33,7 @@ pub enum Command {
 pub async fn start_telegram(token: String, pool: PgPool) -> anyhow::Result<()> {
     tracing::info!("Starting telegram bot");
 
-    let bot = Bot::new(token).auto_send();
+    let bot = Bot::new(token);
 
     Dispatcher::builder(bot, schema())
         .dependencies(dptree::deps![

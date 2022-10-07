@@ -9,7 +9,7 @@ use crate::common::data::{LingeringTask, User};
 
 #[tracing::instrument(skip(bot, msg, pool))]
 pub async fn acknowledge(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     msg: Message,
     pool: PgPool,
     quest_id: Uuid,
@@ -43,7 +43,7 @@ pub async fn acknowledge(
 
 #[tracing::instrument(skip(bot, msg, pool))]
 pub async fn create_quest(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     msg: Message,
     pool: PgPool,
     (name, assign_to): (String, String),

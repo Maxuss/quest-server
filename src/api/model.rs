@@ -1,6 +1,6 @@
 #![allow(non_snake_case, non_camel_case_types)]
 
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::rejection::JsonRejection, http::StatusCode, response::IntoResponse, Json};
 use serde::{ser::SerializeStruct, Serialize};
 use thiserror::Error;
 
@@ -94,6 +94,31 @@ impl<T: Serialize> IntoResponse for Possible<T> {
 }
 
 pub type Payload<T> = axum::response::Result<Possible<T>, ServerError>;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonRejectionWrapper {
+    kind: String,
+    message: String,
+}
+
+impl From<JsonRejection> for JsonRejectionWrapper {
+    fn from(rej: JsonRejection) -> Self {
+        Self {
+            kind: "INVALID_POST_DATA".to_string(),
+            message: rej.to_string(),
+        }
+    }
+}
+
+impl IntoResponse for JsonRejectionWrapper {
+    fn into_response(self) -> axum::response::Response {
+        let payload = Possible::Payload {
+            success: false,
+            data: self,
+        };
+        (StatusCode::BAD_REQUEST, Json(payload)).into_response()
+    }
+}
 
 pub fn Payload<T: Serialize>(data: T) -> Payload<T> {
     Ok(Possible::Payload {
