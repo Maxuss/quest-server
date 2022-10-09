@@ -15,7 +15,7 @@ pub async fn acknowledge(
     quest_id: Uuid,
 ) -> anyhow::Result<()> {
     let quest = sqlx::query_as::<_, LingeringTask>("SELECT * FROM lingering_quests WHERE id = $1")
-        .bind(&quest_id)
+        .bind(quest_id)
         .fetch_optional(&pool)
         .await?;
 
@@ -31,7 +31,7 @@ pub async fn acknowledge(
     debug!("Acknowledging quest {quest_id}!");
 
     sqlx::query("DELETE FROM lingering_quests WHERE id = $1")
-        .bind(&quest_id)
+        .bind(quest_id)
         .execute(&pool)
         .await?;
 
@@ -66,7 +66,7 @@ pub async fn create_quest(
     let task_id = Uuid::new_v4();
 
     sqlx::query("INSERT INTO lingering_quests VALUES($1, $2, $3)")
-        .bind(&task_id)
+        .bind(task_id)
         .bind(user.card_hash)
         .bind(&name)
         .execute(&pool)

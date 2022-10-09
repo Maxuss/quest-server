@@ -27,7 +27,7 @@ pub async fn register(
 
     let rows = sqlx::query("INSERT INTO users_reg_state VALUES($1, $2)")
         .bind(&user.card_hash)
-        .bind(&user.id)
+        .bind(user.id)
         .execute(&pool)
         .await?;
 

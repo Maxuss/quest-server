@@ -252,7 +252,7 @@ async fn get_avatar_callback(
     pool: PgPool,
     (username, id, card_hash): (String, Uuid, String),
 ) -> anyhow::Result<()> {
-    if let Some(_) = &q.data {
+    if q.data.is_some() {
         let chat_id = dialogue.chat_id();
         let chat = bot.get_chat(chat_id).await?;
         let photo = if let Some(photo) = chat.photo {
@@ -285,7 +285,7 @@ async fn finish_registration(
 ) -> anyhow::Result<()> {
     let rows = sqlx::query("INSERT INTO users VALUES($1, $2, $3, $4)")
         .bind(&card_hash)
-        .bind(&uuid)
+        .bind(uuid)
         .bind(&username)
         .bind(id.0)
         .execute(&pool)
