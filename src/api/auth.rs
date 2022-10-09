@@ -14,7 +14,7 @@ pub struct Stage1Register {
 }
 
 #[tracing::instrument(skip(pool))]
-pub async fn stage1_register(
+pub async fn register(
     Json(data): Json<Stage1Register>,
     Extension(pool): Extension<PgPool>,
 ) -> Payload<RegStageUser> {

@@ -4,7 +4,7 @@ use axum::{routing::post, Extension, Router};
 
 use sqlx::PgPool;
 
-use crate::{api::auth::stage1_register, ServerConfig};
+use crate::{api::auth::*, ServerConfig};
 
 mod auth;
 pub mod model;
@@ -15,7 +15,7 @@ pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
     tracing::info!("Starting HTTP server on {}", addr);
 
     let router = Router::new()
-        .route("/user/register", post(stage1_register))
+        .route("/user/register", post(register))
         .layer(Extension(db));
 
     axum::Server::bind(&addr)
