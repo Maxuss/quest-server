@@ -1,6 +1,9 @@
 use std::{net::SocketAddr, str::FromStr};
 
-use axum::{routing::post, Extension, Router};
+use axum::{
+    routing::{get, post},
+    Extension, Router,
+};
 
 use sqlx::PgPool;
 
@@ -16,6 +19,7 @@ pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
 
     let router = Router::new()
         .route("/user/register", post(register))
+        .route("/user/get/:hash", get(get_id))
         .layer(Extension(db));
 
     axum::Server::bind(&addr)

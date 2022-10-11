@@ -7,7 +7,7 @@ use thiserror::Error;
 macro_rules! error_types {
     ($(
         #[$error_def:meta]
-        $variant_name:ident($(#[$meta:meta])? $inner:path)
+        $status_code:ident $variant_name:ident($(#[$meta:meta])? $inner:path)
     ),* $(,)?) => {
         #[derive(Debug, Error)]
         pub enum ServerError {
@@ -30,6 +30,14 @@ macro_rules! error_types {
                 match self {
                     $(
                         Self::$variant_name(v) => v.to_string(),
+                    )*
+                }
+            }
+
+            pub fn status_code(&self) -> StatusCode {
+                match self {
+                    $(
+                        Self::$variant_name(_) => StatusCode::$status_code,
                     )*
                 }
             }
@@ -64,13 +72,19 @@ impl IntoResponse for ServerError {
 
 error_types! {
     #[error("An unknown error has occurred: {0}")]
-    UNKNOWN(String),
+    INTERNAL_SERVER_ERROR UNKNOWN(String),
 
     #[error("Anyhow provoked error has occurred: {0}")]
-    PROVOKED(#[from] anyhow::Error),
+    BAD_REQUEST PROVOKED(#[from] anyhow::Error),
 
     #[error("An SQL provoked error has occurred: {0}")]
-    SQL_ERROR(#[from] sqlx::Error)
+    INTERNAL_SERVER_ERROR SQL_ERROR(#[from] sqlx::Error),
+
+    #[error("Invalid data format provided: {0}")]
+    BAD_REQUEST INVALID_FORMAT(String),
+
+    #[error("Could not find data: {0}")]
+    NOT_FOUND NOT_FOUND(String)
 }
 
 #[derive(Debug, Serialize)]
@@ -89,37 +103,18 @@ pub enum Possible<T: Serialize> {
 
 impl<T: Serialize> IntoResponse for Possible<T> {
     fn into_response(self) -> axum::response::Response {
-        Json::into_response(Json(self))
+        match self {
+            Possible::Payload { .. } => Json::into_response(Json(self)),
+            Possible::Error { success, error } => {
+                (error.status_code(), Json(Self::Error { success, error })).into_response()
+            }
+        }
     }
 }
 
 pub type Payload<T> = axum::response::Result<Possible<T>, ServerError>;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct JsonRejectionWrapper {
-    kind: String,
-    message: String,
-}
-
-impl From<JsonRejection> for JsonRejectionWrapper {
-    fn from(rej: JsonRejection) -> Self {
-        Self {
-            kind: "INVALID_POST_DATA".to_string(),
-            message: rej.to_string(),
-        }
-    }
-}
-
-impl IntoResponse for JsonRejectionWrapper {
-    fn into_response(self) -> axum::response::Response {
-        let payload = Possible::Payload {
-            success: false,
-            data: self,
-        };
-        (StatusCode::BAD_REQUEST, Json(payload)).into_response()
-    }
-}
-
+#[inline]
 pub fn Payload<T: Serialize>(data: T) -> Payload<T> {
     Ok(Possible::Payload {
         success: true,
@@ -127,6 +122,7 @@ pub fn Payload<T: Serialize>(data: T) -> Payload<T> {
     })
 }
 
+#[inline]
 pub fn Error<T: Serialize>(error: ServerError) -> Payload<T> {
     Err(error)
 }
