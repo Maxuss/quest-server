@@ -1,6 +1,6 @@
 #![allow(non_snake_case, non_camel_case_types)]
 
-use axum::{extract::rejection::JsonRejection, http::StatusCode, response::IntoResponse, Json};
+use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::{ser::SerializeStruct, Serialize};
 use thiserror::Error;
 

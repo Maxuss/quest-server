@@ -1,12 +1,10 @@
-use std::marker::PhantomData;
-
 use super::model::Payload;
 use crate::{
     api::model::{Error, ServerError},
     common::data::{RegStageUser, User},
 };
 use axum::{extract::Path, Extension, Json};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sqlx::PgPool;
 use tracing::{debug, log::warn};
 use uuid::Uuid;
