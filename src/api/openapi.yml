@@ -1,0 +1,101 @@
+openapi: 3.0.0
+info:
+  description: Основное описание API для квеста
+  version: 0.2.0
+  title: Квест
+  contact:
+    email: maxus.info.mail@gmail.com
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+tags:
+  - name: user
+    description: Все связанное с аутентификацией и данными игроков
+  - name: quest
+    description: Все связанное с квестами
+paths:
+  /user/register:
+    post:
+      tags:
+        - user
+      summary: Начинает регистрацию
+      description: Подготавливает процесс регистрации для пользователя через телеграм бота
+      operationId: userRegister
+      requestBody:
+        $ref: "#/components/requestBodies/RegisterUser"
+      responses:
+        "400":
+          description: Неверные данные предоставлены/пользователь уже зарегистрирован
+  "/user/get/{hash}":
+    get:
+      tags:
+        - user
+      summary: Пытается получить пользователя по его SHA256 хэшу
+      description: ""
+      operationId: getUserByHash
+      parameters:
+        - name: hash
+          in: path
+          description: "SHA256 хэш пользователя"
+          required: true
+          schema:
+            type: string
+            format: sha256
+      responses:
+        "200":
+          description: Успешная операция
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Неверный хэш
+        "404":
+          description: Пользователь не найден
+components:
+  requestBodies:
+    RegisterUser:
+      description: "**SHA256** хэш определенной части карты, который позволяет идентифицировать пользователя"
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              hash_code: 
+                type: string
+                format: sha256
+          example:
+             hash_code: e8683af7bf220fa08d30e40cdc376f928269a22f7581c25aba4dd6fb271ee016
+  schemas:
+    RegStageUser:
+      description: "Данные одного пользователя на время регистрации"
+      type: object
+      properties:
+        card_hash: 
+          type: string
+          format: sha256
+        id:
+          type: string
+          format: uuid
+    User:
+      description: "Данные одного пользователя"
+      type: object
+      properties:
+        card_hash: 
+          type: string
+          format: sha256
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        telegram_chat_id:
+          type: number
+          format: int32
+          description: ID пользователя в телеграме
+      example:
+        card_hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        id: be1c5023-0973-4d9a-8495-57ece0e5bcc8
+        username: maxus
+        telegram_chat_id: 12413556
