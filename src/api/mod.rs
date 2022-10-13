@@ -1,6 +1,8 @@
 use std::{net::SocketAddr, str::FromStr};
 
 use axum::{
+    handler::Handler,
+    http::{Method, Uri},
     routing::{get, post},
     Extension, Router,
 };
@@ -8,6 +10,8 @@ use axum::{
 use sqlx::PgPool;
 
 use crate::{api::auth::*, ServerConfig};
+
+use self::model::ServerError;
 
 mod auth;
 pub mod model;
@@ -20,6 +24,7 @@ pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
     let router = Router::new()
         .route("/user/register", post(register))
         .route("/user/get/:hash", get(get_id))
+        .fallback(handler404.into_service())
         .layer(Extension(db));
 
     axum::Server::bind(&addr)
@@ -27,4 +32,8 @@ pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
         .await?;
 
     Ok(())
+}
+
+async fn handler404(path: Uri, method: Method) -> ServerError {
+    ServerError::NOT_FOUND(format!("Endpoint `{path}` for method `{method}` not found"))
 }

@@ -60,7 +60,7 @@ macro_rules! error_types {
 impl IntoResponse for ServerError {
     fn into_response(self) -> axum::response::Response {
         (
-            StatusCode::BAD_REQUEST,
+            self.status_code(),
             Possible::<()>::Error {
                 success: false,
                 error: self,

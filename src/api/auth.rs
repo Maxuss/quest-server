@@ -11,17 +11,15 @@ use uuid::Uuid;
 
 // POST models
 #[derive(Debug, Clone, Deserialize)]
-pub struct Stage1Register {
+pub struct RegisterUser {
     card_hash: String,
 }
 
 #[tracing::instrument(skip(pool))]
 pub async fn register(
-    Json(data): Json<Stage1Register>,
+    Json(data): Json<RegisterUser>,
     Extension(pool): Extension<PgPool>,
 ) -> Payload<RegStageUser> {
-    debug!("Performing stage 1 register!");
-
     let user = RegStageUser {
         card_hash: data.card_hash,
         id: Uuid::new_v4(),
