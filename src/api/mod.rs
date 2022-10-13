@@ -24,7 +24,8 @@ pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
 
     let router = Router::new()
         .route("/user/register", post(register))
-        .route("/user/get/:hash", get(get_id))
+        .route("/user/get/:hash", get(get_user))
+        .route("/user/avatar/:id", get(get_avatar))
         .route("/api", get(openapi::openapi_route))
         .route("/resources/openapi.yml", get(openapi::openapi_yml_route))
         .fallback(handler404.into_service())

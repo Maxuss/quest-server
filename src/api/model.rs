@@ -84,7 +84,10 @@ error_types! {
     BAD_REQUEST INVALID_FORMAT(String),
 
     #[error("Could not find data: {0}")]
-    NOT_FOUND NOT_FOUND(String)
+    NOT_FOUND NOT_FOUND(String),
+
+    #[error("An internal IO error has occurred: {0}")]
+    INTERNAL_SERVER_ERROR IO_ERROR(#[from] std::io::Error)
 }
 
 #[derive(Debug, Serialize)]

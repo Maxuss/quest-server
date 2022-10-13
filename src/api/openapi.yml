@@ -18,20 +18,24 @@ paths:
     post:
       tags:
         - user
-      summary: Начинает регистрацию
+      summary: Начать регистрацию
       description: Подготавливает процесс регистрации для пользователя через телеграм бота
       operationId: userRegister
       requestBody:
         $ref: "#/components/requestBodies/RegisterUser"
       responses:
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegStageUser"
           description: Неверные данные предоставлены/пользователь уже зарегистрирован
   "/user/get/{hash}":
     get:
       tags:
         - user
-      summary: Пытается получить пользователя по его SHA256 хэшу
-      description: ""
+      summary: Данные пользователя
+      description: Получает данные пользователя из предоставленного хэша
       operationId: getUserByHash
       parameters:
         - name: hash
@@ -52,6 +56,34 @@ paths:
           description: Неверный хэш
         "404":
           description: Пользователь не найден
+  "/user/avatar/{id}":
+    get:
+      tags:
+        - user
+      summary: Аватар пользователя
+      description: Получает аватар пользователя из ID
+      operationId: getAvatarById
+      parameters:
+        - name: id
+          in: path
+          description: "UUID пользователя"
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Успешная операция
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Неверный хэш
+        "404":
+          description: Пользователь не найден
+ 
 components:
   requestBodies:
     RegisterUser:
