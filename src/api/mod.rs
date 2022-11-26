@@ -1,10 +1,9 @@
 use std::{net::SocketAddr, str::FromStr};
 
 use axum::{
-    handler::Handler,
     http::{Method, Uri},
     routing::{get, post},
-    Extension, Router,
+    Router,
 };
 
 use sqlx::PgPool;
@@ -28,8 +27,8 @@ pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
         .route("/user/avatar/:id", get(get_avatar))
         .route("/api", get(openapi::openapi_route))
         .route("/resources/openapi.yml", get(openapi::openapi_yml_route))
-        .fallback(handler404.into_service())
-        .layer(Extension(db));
+        .fallback(handler404)
+        .with_state(db);
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service())

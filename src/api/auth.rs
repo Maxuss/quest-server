@@ -3,8 +3,14 @@ use crate::{
     api::model::{Error, ServerError},
     common::data::{RegStageUser, User},
 };
-use axum::{body::Body, extract::Path, http::Request, response::Response, Extension, Json};
-use serde::Deserialize;
+use axum::{
+    body::Body,
+    extract::{Path, State},
+    http::Request,
+    response::Response,
+    Extension, Json,
+};
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tower_http::services::fs::ServeFile;
 use tower_service::Service;
@@ -12,15 +18,16 @@ use tracing::{debug, log::warn};
 use uuid::Uuid;
 
 // POST models
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterUser {
     card_hash: String,
 }
 
+#[axum_macros::debug_handler]
 #[tracing::instrument(skip(pool))]
 pub async fn register(
+    State(pool): State<PgPool>,
     Json(data): Json<RegisterUser>,
-    Extension(pool): Extension<PgPool>,
 ) -> Payload<RegStageUser> {
     let user = RegStageUser {
         card_hash: data.card_hash,

@@ -37,7 +37,7 @@ pub async fn create<P: AsRef<Path> + std::fmt::Debug>(path: P) -> anyhow::Result
         return File::create(path).await.map_err(anyhow::Error::from);
     }
     remove_file(path).await?;
-    return File::create(path).await.map_err(anyhow::Error::from);
+    File::create(path).await.map_err(anyhow::Error::from)
 }
 
 #[tracing::instrument]
