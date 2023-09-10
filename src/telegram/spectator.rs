@@ -1,4 +1,4 @@
-use mongodb::bson::{doc, Bson};
+use mongodb::bson::doc;
 
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
@@ -6,7 +6,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 use crate::common::{
-    data::{BsonId, LingeringTask, User},
+    data::{BsonId, LingeringTask},
     mongo::MongoDatabase,
 };
 

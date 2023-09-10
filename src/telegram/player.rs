@@ -1,5 +1,5 @@
 use futures::{StreamExt, TryStreamExt};
-use mongodb::bson::{doc, Bson};
+use mongodb::bson::doc;
 use teloxide::{
     dispatching::{
         dialogue::{self, InMemStorage},
@@ -7,13 +7,13 @@ use teloxide::{
     },
     net::Download,
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ParseMode},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, ParseMode},
 };
-use tokio::io::AsyncWriteExt;
+
 use tracing::{info, warn};
 
 use crate::common::{
-    data::{BsonId, RegStageUser, User},
+    data::{BsonId, User},
     fs::create,
     mongo::MongoDatabase,
 };
@@ -21,7 +21,6 @@ use crate::common::{
 use super::Command;
 
 use teloxide::dptree::case;
-use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub enum RegisterDialogueState {
@@ -104,9 +103,9 @@ async fn help(bot: Bot, msg: Message) -> anyhow::Result<()> {
 async fn start(bot: Bot, msg: Message) -> anyhow::Result<()> {
     bot.send_message(
         msg.chat.id,
-        r#"Этот бот позволяет вам регистрироваться на квест\.
+        r"Этот бот позволяет вам регистрироваться на квест\.
 Начните процесс регистрации командой `/register <токен>`,
-заменив `<токен>`на ваш токен регистрации\."#,
+заменив `<токен>`на ваш токен регистрации\.",
     )
     .parse_mode(ParseMode::MarkdownV2)
     .await?;

@@ -7,13 +7,12 @@ use crate::{
     },
 };
 use axum::{
-    body::{Body, StreamBody},
+    body::StreamBody,
     extract::{Path, State},
-    http::{header, Request},
+    http::header,
     response::IntoResponse,
     Json,
 };
-use futures::StreamExt;
 use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
 use tokio_util::compat::FuturesAsyncReadCompatExt;

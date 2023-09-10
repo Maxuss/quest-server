@@ -12,7 +12,7 @@ use tracing::info;
 use tracing_subscriber::prelude::*;
 
 use crate::api::start_api;
-use crate::common::fs::prepare_fs;
+
 use crate::common::mongo::MongoDatabase;
 use crate::telegram::start_telegram;
 
