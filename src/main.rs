@@ -1,19 +1,19 @@
 use std::path::Path;
 
 use anyhow::bail;
+use mongodb::options::ClientOptions;
+use mongodb::{Client, Database};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
-use sqlx::{ConnectOptions, PgPool};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::join;
 use tokio::task::JoinHandle;
 use tracing::info;
-use tracing_appender::rolling;
 use tracing_subscriber::prelude::*;
 
 use crate::api::start_api;
 use crate::common::fs::prepare_fs;
+use crate::common::mongo::MongoDatabase;
 use crate::telegram::start_telegram;
 
 pub mod api;
@@ -21,18 +21,11 @@ pub mod common;
 pub mod telegram;
 
 fn prepare_logging() -> anyhow::Result<()> {
-    let appender = rolling::minutely("logs/", "latest.log");
-
-    let stdout_log = tracing_subscriber::fmt::layer().pretty();
-    let file_log = tracing_subscriber::fmt::layer()
-        .with_ansi(false)
-        .with_writer(appender);
-
+    let stdout_log = tracing_subscriber::fmt::layer().compact();
     tracing_subscriber::registry()
         .with(
             stdout_log
                 .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG)
-                .and_then(file_log)
                 .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
                     metadata
                         .module_path()
@@ -66,20 +59,21 @@ async fn prepare_config() -> anyhow::Result<ServerConfig> {
 }
 
 #[tracing::instrument]
-async fn prepare_db(cfg: &ServerConfig) -> anyhow::Result<PgPool> {
-    let pool = PgPoolOptions::new()
-        .max_connections(4)
-        .connect_with(
-            PgConnectOptions::new()
-                .host(&cfg.postgres.host)
-                .username(&cfg.postgres.username)
-                .password(&cfg.postgres.password)
-                .database(&cfg.postgres.database)
-                .log_statements(tracing::log::LevelFilter::Off)
-                .to_owned(),
-        )
-        .await?;
-    Ok(pool)
+async fn prepare_db(cfg: &ServerConfig) -> anyhow::Result<Database> {
+    let uri = format!(
+        "mongodb://{}:{}@{}:27017/{}?retryWrites=true",
+        cfg.mongo.username, cfg.mongo.password, cfg.mongo.host, cfg.mongo.database
+    );
+
+    let mut opts = ClientOptions::parse(uri).await?;
+    opts.app_name = Some(String::from("card-quest"));
+
+    let client = Client::with_options(opts)?;
+    let db = client.database("quest");
+
+    info!("Connected to MongoDB successfully!");
+
+    Ok(db)
 }
 
 #[tokio::main]
@@ -88,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Initializing the Cardquest backend...");
 
-    prepare_fs().await?;
+    // prepare_fs().await?;
 
     let cfg = if let Ok(cfg) = prepare_config().await {
         cfg
@@ -96,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     };
 
-    let db = prepare_db(&cfg).await?;
+    let db = MongoDatabase::new(prepare_db(&cfg).await?);
 
     let db_clone = db.clone();
     let tg_key = cfg.telegram.api_key.clone();
@@ -117,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
 pub struct ServerConfig {
     api: ApiConfig,
     telegram: TelegramConfig,
-    postgres: PostgresConfig,
+    mongo: MongoConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,7 +127,7 @@ pub struct TelegramConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostgresConfig {
+pub struct MongoConfig {
     database: String,
     host: String,
     username: String,
@@ -151,8 +145,8 @@ impl Default for ServerConfig {
             telegram: TelegramConfig {
                 api_key: "<ENTER KEY HERE>".to_string(),
             },
-            postgres: PostgresConfig {
-                database: "cardquest".to_string(),
+            mongo: MongoConfig {
+                database: "quest".to_string(),
                 host: "localhost".to_string(),
                 username: "<USERNAME>".to_string(),
                 password: "<PASSWORD>".to_string(),

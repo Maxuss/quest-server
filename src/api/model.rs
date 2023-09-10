@@ -74,11 +74,11 @@ error_types! {
     #[error("An unknown error has occurred: {0}")]
     INTERNAL_SERVER_ERROR UNKNOWN(String),
 
-    #[error("Anyhow provoked error has occurred: {0}")]
+    #[error("Anyhow-provoked error has occurred: {0}")]
     BAD_REQUEST PROVOKED(#[from] anyhow::Error),
 
-    #[error("An SQL provoked error has occurred: {0}")]
-    INTERNAL_SERVER_ERROR SQL_ERROR(#[from] sqlx::Error),
+    #[error("A database provoked error has occurred: {0}")]
+    INTERNAL_SERVER_ERROR MONGO_ERROR(#[from] mongodb::error::Error),
 
     #[error("Invalid data format provided: {0}")]
     BAD_REQUEST INVALID_FORMAT(String),

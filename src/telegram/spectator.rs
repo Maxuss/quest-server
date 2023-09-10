@@ -1,25 +1,25 @@
-use sqlx::PgPool;
+use mongodb::bson::{doc, Bson};
 
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::common::data::{LingeringTask, User};
+use crate::common::{
+    data::{BsonId, LingeringTask, User},
+    mongo::MongoDatabase,
+};
 
-#[tracing::instrument(skip(bot, msg, pool))]
+#[tracing::instrument(skip(bot, msg, db))]
 pub async fn acknowledge(
     bot: Bot,
     msg: Message,
-    pool: PgPool,
+    db: MongoDatabase,
     quest_id: Uuid,
 ) -> anyhow::Result<()> {
-    let quest = sqlx::query_as::<_, LingeringTask>("SELECT * FROM lingering_quests WHERE id = $1")
-        .bind(quest_id)
-        .fetch_optional(&pool)
-        .await?;
+    let quest = db.tasks.find_one(doc! { "id": &quest_id }, None).await?;
 
-    // todo: actually do something with the acquired lingering quest
+    // TODO: actually do something with the acquired lingering quest
     let _quest = if let Some(quest) = quest {
         quest
     } else {
@@ -30,10 +30,7 @@ pub async fn acknowledge(
 
     debug!("Acknowledging quest {quest_id}!");
 
-    sqlx::query("DELETE FROM lingering_quests WHERE id = $1")
-        .bind(quest_id)
-        .execute(&pool)
-        .await?;
+    db.tasks.delete_many(doc! { "id": &quest_id }, None).await?;
 
     bot.send_message(msg.chat.id, format!("Успешно завершили квест {quest_id}!"))
         .await?;
@@ -41,16 +38,16 @@ pub async fn acknowledge(
     Ok(())
 }
 
-#[tracing::instrument(skip(bot, msg, pool))]
+#[tracing::instrument(skip(bot, msg, db))]
 pub async fn create_quest(
     bot: Bot,
     msg: Message,
-    pool: PgPool,
+    db: MongoDatabase,
     (name, assign_to): (String, String),
 ) -> anyhow::Result<()> {
-    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1")
-        .bind(&assign_to)
-        .fetch_optional(&pool)
+    let user = db
+        .users
+        .find_one(doc! { "username": &assign_to }, None)
         .await?;
 
     let user = if let Some(user) = user {
@@ -63,15 +60,18 @@ pub async fn create_quest(
 
     debug!("Assigning the `{name}` quest to player `{assign_to}`!");
 
-    let task_id = Uuid::new_v4();
+    let task_id = BsonId::new();
 
-    sqlx::query("INSERT INTO lingering_quests VALUES($1, $2, $3)")
-        .bind(task_id)
-        .bind(user.card_hash)
-        .bind(&name)
-        .execute(&pool)
-        .await
-        .unwrap();
+    db.tasks
+        .insert_one(
+            LingeringTask {
+                id: task_id,
+                assigned_to: user.card_hash,
+                quest_name: name.clone(),
+            },
+            None,
+        )
+        .await?;
 
     bot.send_message(
         msg.chat.id,

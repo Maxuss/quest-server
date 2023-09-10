@@ -1,20 +1,24 @@
 use super::model::Payload;
 use crate::{
     api::model::{Error, ServerError},
-    common::data::{RegStageUser, User},
+    common::{
+        data::{BsonId, RegStageUser, User},
+        mongo::MongoDatabase,
+    },
 };
 use axum::{
-    body::Body,
+    body::{Body, StreamBody},
     extract::{Path, State},
-    http::Request,
-    response::Response,
-    Extension, Json,
+    http::{header, Request},
+    response::IntoResponse,
+    Json,
 };
+use futures::StreamExt;
+use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
-use tower_http::services::fs::ServeFile;
-use tower_service::Service;
-use tracing::{debug, log::warn};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::io::ReaderStream;
+use tracing::debug;
 use uuid::Uuid;
 
 // POST models
@@ -24,37 +28,23 @@ pub struct RegisterUser {
 }
 
 #[axum_macros::debug_handler]
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(db))]
 pub async fn register(
-    State(pool): State<PgPool>,
+    State(db): State<MongoDatabase>,
     Json(data): Json<RegisterUser>,
 ) -> Payload<RegStageUser> {
     let user = RegStageUser {
         card_hash: data.card_hash,
-        id: Uuid::new_v4(),
+        id: BsonId::new(),
     };
 
-    let rows = sqlx::query("INSERT INTO users_reg_state VALUES($1, $2)")
-        .bind(&user.card_hash)
-        .bind(user.id)
-        .execute(&pool)
-        .await?;
-
-    if rows.rows_affected() != 1 {
-        warn!(
-            "Invalid amount of rows affect, expected 1 but got {}",
-            rows.rows_affected()
-        )
-    }
+    db.reg_stage.insert_one(user.clone(), None).await?;
 
     Payload(user)
 }
 
-#[tracing::instrument(skip(pool))]
-pub async fn get_user(
-    Path(hash): Path<String>,
-    Extension(pool): Extension<PgPool>,
-) -> Payload<User> {
+#[tracing::instrument(skip(db))]
+pub async fn get_user(Path(hash): Path<String>, State(db): State<MongoDatabase>) -> Payload<User> {
     debug!("Client tried to get id of user with sha256 hash of {hash}");
 
     if hash.len() != 64 {
@@ -64,10 +54,7 @@ pub async fn get_user(
         )));
     }
 
-    let expected_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE card_hash = $1")
-        .bind(&hash)
-        .fetch_optional(&pool)
-        .await?;
+    let expected_user = db.users.find_one(doc! { "card_hash": &hash }, None).await?;
 
     let user = if let Some(user) = expected_user {
         user
@@ -80,19 +67,16 @@ pub async fn get_user(
     Payload(user)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(db))]
 pub async fn get_avatar(
     Path(id): Path<Uuid>,
-    Extension(pool): Extension<PgPool>,
-    req: Request<Body>,
-) -> axum::response::Result<
-    Response<tower_http::services::fs::ServeFileSystemResponseBody>,
-    ServerError,
-> {
-    let expected_user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&pool)
-        .await?;
+    State(db): State<MongoDatabase>,
+) -> axum::response::Result<impl IntoResponse, ServerError> {
+    debug!("Getting user with ID {id}");
+    let id = mongodb::bson::Uuid::from_uuid_1(id);
+    let expected_user = db.users.find_one(doc! { "id": id }, None).await?;
+    let any = db.users.find_one(doc! {}, None).await?;
+    debug!("User: {expected_user:#?} {any:#?}");
 
     let user = if let Some(user) = expected_user {
         user
@@ -102,8 +86,19 @@ pub async fn get_avatar(
         )));
     };
 
-    ServeFile::new(format!("data/image/{}.png", user.card_hash))
-        .call(req)
-        .await
-        .map_err(crate::api::model::ServerError::from)
+    let stream: mongodb::GridFsDownloadStream = db
+        .gridfs
+        .open_download_stream_by_name(format!("{}.png", user.card_hash), None)
+        .await?;
+    let body = StreamBody::new(ReaderStream::new(stream.compat()));
+
+    let headers = [
+        (header::CONTENT_TYPE, "image/png"),
+        // (
+        //     header::CONTENT_DISPOSITION,
+        //     "attachment; filename=\"avatar.png\"",
+        // ),
+    ];
+
+    Ok((headers, body))
 }

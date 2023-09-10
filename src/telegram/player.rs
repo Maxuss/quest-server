@@ -1,4 +1,5 @@
-use sqlx::PgPool;
+use futures::{StreamExt, TryStreamExt};
+use mongodb::bson::{doc, Bson};
 use teloxide::{
     dispatching::{
         dialogue::{self, InMemStorage},
@@ -8,9 +9,14 @@ use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ParseMode},
 };
+use tokio::io::AsyncWriteExt;
 use tracing::{info, warn};
 
-use crate::common::{data::RegStageUser, fs::create};
+use crate::common::{
+    data::{BsonId, RegStageUser, User},
+    fs::create,
+    mongo::MongoDatabase,
+};
 
 use super::Command;
 
@@ -21,12 +27,12 @@ use uuid::Uuid;
 pub enum RegisterDialogueState {
     StartRegister,
     GetUsername {
-        id: Uuid,
+        id: BsonId,
         card_hash: String,
     },
     GetAvatar {
         username: String,
-        id: Uuid,
+        id: BsonId,
         card_hash: String,
     },
 }
@@ -108,13 +114,13 @@ async fn start(bot: Bot, msg: Message) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tracing::instrument(skip(bot, msg, dialogue, pool))]
+#[tracing::instrument(skip(bot, msg, dialogue, db))]
 pub async fn register(
     bot: Bot,
     msg: Message,
     dialogue: RegisterDialogue,
     token: String,
-    pool: PgPool,
+    db: MongoDatabase,
 ) -> anyhow::Result<()> {
     info!("Performing registration for user!");
     if token.len() != 8 {
@@ -122,12 +128,11 @@ pub async fn register(
             .await?;
         return Ok(());
     }
-    let user = sqlx::query_as::<_, RegStageUser>(
-        "SELECT * FROM users_reg_state WHERE starts_with(card_hash, $1)",
-    )
-    .bind(&token)
-    .fetch_optional(&pool)
-    .await?;
+    let pattern = format!("^{token}");
+    let user = db
+        .reg_stage
+        .find_one(doc! { "card_hash": { "$regex": &pattern } }, None)
+        .await?;
     let stage = if let Some(stage) = user {
         stage
     } else {
@@ -139,15 +144,15 @@ pub async fn register(
     bot.send_message(msg.chat.id, "Вы начинаете регистрацию на квест.")
         .await?;
 
-    let deleted = sqlx::query("DELETE FROM users_reg_state WHERE starts_with(card_hash, $1)")
-        .bind(&stage.card_hash)
-        .execute(&pool)
+    let deleted = db
+        .reg_stage
+        .delete_one(doc! { "card_hash": { "$regex": &pattern } }, None)
         .await?;
 
-    if deleted.rows_affected() != 1 {
+    if deleted.deleted_count != 1 {
         warn!(
-            "Invalid amount of rows affected for delete operation, expected 1 but got {}",
-            deleted.rows_affected()
+            "Invalid amount of documents affected by delete operation, expected 1 but got {}",
+            deleted.deleted_count
         )
     }
 
@@ -164,17 +169,17 @@ pub async fn register(
     Ok(())
 }
 
-#[tracing::instrument(skip(bot, msg, dialogue, pool))]
+#[tracing::instrument(skip(bot, msg, dialogue, db))]
 async fn get_username(
     bot: Bot,
     msg: Message,
     dialogue: RegisterDialogue,
-    pool: PgPool,
-    (id, card_hash): (Uuid, String),
+    db: MongoDatabase,
+    (id, card_hash): (BsonId, String),
 ) -> anyhow::Result<()> {
     match msg.text().map(ToOwned::to_owned) {
         Some(username) => {
-            if is_username_used(&pool, &username).await? {
+            if is_username_used(&db, &username).await? {
                 bot
                     .send_message(
                         dialogue.chat_id(),
@@ -214,13 +219,13 @@ fn make_avatar_keyboard(msg: &Message) -> InlineKeyboardMarkup {
     )]])
 }
 
-#[tracing::instrument(skip(bot, msg, dialogue, pool))]
+#[tracing::instrument(skip(bot, msg, dialogue, db))]
 async fn get_avatar(
     bot: Bot,
     msg: Message,
     dialogue: RegisterDialogue,
-    pool: PgPool,
-    (username, id, card_hash): (String, Uuid, String),
+    db: MongoDatabase,
+    (username, id, card_hash): (String, BsonId, String),
 ) -> anyhow::Result<()> {
     match msg.photo().map(ToOwned::to_owned) {
         Some(photo) => {
@@ -231,7 +236,7 @@ async fn get_avatar(
             let mut out = create(format!("data/image/{card_hash}.png")).await?;
             bot.download_file(&file.path, &mut out).await?;
 
-            finish_registration(bot, msg.chat.id, pool, username, id, card_hash).await?;
+            finish_registration(bot, msg.chat.id, db, username, id, card_hash).await?;
 
             dialogue.exit().await?;
         }
@@ -244,13 +249,13 @@ async fn get_avatar(
     Ok(())
 }
 
-#[tracing::instrument(skip(bot, q, dialogue, pool))]
+#[tracing::instrument(skip(bot, q, dialogue, db))]
 async fn get_avatar_callback(
     bot: Bot,
     q: CallbackQuery,
     dialogue: RegisterDialogue,
-    pool: PgPool,
-    (username, id, card_hash): (String, Uuid, String),
+    db: MongoDatabase,
+    (username, id, card_hash): (String, BsonId, String),
 ) -> anyhow::Result<()> {
     if q.data.is_some() {
         let chat_id = dialogue.chat_id();
@@ -264,40 +269,43 @@ async fn get_avatar_callback(
             return Ok(());
         };
         let file = bot.get_file(photo.small_file_id).await?;
-        let mut out = create(format!("data/image/{card_hash}.png")).await?;
-        bot.download_file(&file.path, &mut out).await?;
+        bot.send_message(chat_id, "Будет использовано фото профиля.")
+            .await?;
 
-        finish_registration(bot, chat_id, pool, username, id, card_hash).await?;
+        let stream = bot.download_file_stream(&file.path);
+        let stream = stream.map(|it| std::io::Result::Ok(it.unwrap())).boxed();
+        db.gridfs
+            .upload_from_futures_0_3_reader(
+                format!("{card_hash}.png"),
+                stream.into_async_read(),
+                None,
+            )
+            .await?;
+
+        finish_registration(bot, chat_id, db, username, id, card_hash).await?;
 
         dialogue.exit().await?;
     }
     Ok(())
 }
 
-#[tracing::instrument(skip(bot, id, pool))]
+#[tracing::instrument(skip(bot, id, db))]
 async fn finish_registration(
     bot: Bot,
     id: ChatId,
-    pool: PgPool,
+    db: MongoDatabase,
     username: String,
-    uuid: Uuid,
+    uuid: BsonId,
     card_hash: String,
 ) -> anyhow::Result<()> {
-    let rows = sqlx::query("INSERT INTO users VALUES($1, $2, $3, $4)")
-        .bind(&card_hash)
-        .bind(uuid)
-        .bind(&username)
-        .bind(id.0)
-        .execute(&pool)
-        .await?;
-    if rows.rows_affected() < 1 {
-        bot.send_message(id, "Не удалось провести регистрацию!")
-            .await?;
-        return Ok(());
-    }
+    let new_user = User {
+        card_hash,
+        id: uuid,
+        username: username.clone(),
+        telegram_chat_id: id.0,
+    };
+    db.users.insert_one(new_user, None).await?;
 
-    bot.send_photo(id, InputFile::file(format!("data/image/{card_hash}.png")))
-        .await?;
     bot.send_message(
         id,
         format!("Регистрация проведена успешно!\nИмя пользователя: {username}"),
@@ -316,15 +324,10 @@ async fn cancel(bot: Bot, msg: Message, dialogue: RegisterDialogue) -> anyhow::R
     Ok(())
 }
 
-async fn is_username_used(pool: &PgPool, username: &String) -> anyhow::Result<bool> {
-    if sqlx::query("SELECT * FROM users WHERE username = $1")
-        .bind(username)
-        .fetch_optional(pool)
-        .await?
-        .is_some()
-    {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+async fn is_username_used(db: &MongoDatabase, username: &str) -> anyhow::Result<bool> {
+    let found = db
+        .users
+        .find_one(doc! { "username": username }, None)
+        .await?;
+    Ok(found.is_some())
 }

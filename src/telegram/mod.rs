@@ -1,10 +1,11 @@
-use sqlx::PgPool;
 use teloxide::{
     dispatching::{dialogue::InMemStorage, UpdateHandler},
     prelude::*,
     utils::command::BotCommands,
 };
 use uuid::Uuid;
+
+use crate::common::mongo::MongoDatabase;
 
 use self::player::player_schema;
 
@@ -30,7 +31,7 @@ pub enum Command {
 
 #[allow(unused_variables)]
 #[tracing::instrument(skip_all)]
-pub async fn start_telegram(token: String, pool: PgPool) -> anyhow::Result<()> {
+pub async fn start_telegram(token: String, db: MongoDatabase) -> anyhow::Result<()> {
     tracing::info!("Starting telegram bot");
 
     let bot = Bot::new(token);
@@ -38,7 +39,7 @@ pub async fn start_telegram(token: String, pool: PgPool) -> anyhow::Result<()> {
     Dispatcher::builder(bot, schema())
         .dependencies(dptree::deps![
             InMemStorage::<player::RegisterDialogueState>::new(),
-            pool
+            db
         ])
         .enable_ctrlc_handler()
         .build()

@@ -6,9 +6,7 @@ use axum::{
     Router,
 };
 
-use sqlx::PgPool;
-
-use crate::{api::auth::*, ServerConfig};
+use crate::{api::auth::*, common::mongo::MongoDatabase, ServerConfig};
 
 use self::model::ServerError;
 
@@ -17,7 +15,7 @@ pub mod model;
 mod openapi;
 
 #[tracing::instrument(skip_all)]
-pub async fn start_api(cfg: &ServerConfig, db: PgPool) -> anyhow::Result<()> {
+pub async fn start_api(cfg: &ServerConfig, db: MongoDatabase) -> anyhow::Result<()> {
     let addr = SocketAddr::from_str(&format!("{}:{}", cfg.api.host, cfg.api.port))?;
     tracing::info!("Starting HTTP server on {}", addr);
 

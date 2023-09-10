@@ -1,24 +1,24 @@
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
-use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub type BsonId = mongodb::bson::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegStageUser {
     pub card_hash: String,
-    pub id: Uuid,
+    pub id: BsonId,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub card_hash: String,
-    pub id: Uuid,
+    pub id: BsonId,
     pub username: String,
-    pub telegram_chat_id: i32,
+    pub telegram_chat_id: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LingeringTask {
-    pub id: Uuid,
+    pub id: BsonId,
     pub assigned_to: String,
     pub quest_name: String,
 }
