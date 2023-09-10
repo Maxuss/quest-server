@@ -45,6 +45,6 @@ Cargo.lock
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,rust
 
 # other stuff
-logs
+# logs
 config.toml
-data
+# data
