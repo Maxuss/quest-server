@@ -48,3 +48,4 @@ Cargo.lock
 # logs
 config.toml
 # data
+.idea

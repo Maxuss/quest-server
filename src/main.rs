@@ -6,19 +6,15 @@ use mongodb::{Client, Database};
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::join;
-use tokio::task::JoinHandle;
 use tracing::info;
 use tracing_subscriber::prelude::*;
 
 use crate::api::start_api;
 
 use crate::common::mongo::MongoDatabase;
-use crate::telegram::start_telegram;
 
 pub mod api;
 pub mod common;
-pub mod telegram;
 
 fn prepare_logging() -> anyhow::Result<()> {
     let stdout_log = tracing_subscriber::fmt::layer().compact();
@@ -82,8 +78,6 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Initializing the Cardquest backend...");
 
-    // prepare_fs().await?;
-
     let cfg = if let Ok(cfg) = prepare_config().await {
         cfg
     } else {
@@ -92,17 +86,7 @@ async fn main() -> anyhow::Result<()> {
 
     let db = MongoDatabase::new(prepare_db(&cfg).await?);
 
-    let db_clone = db.clone();
-    let tg_key = cfg.telegram.api_key.clone();
-
-    let telegram_handle: JoinHandle<anyhow::Result<()>> =
-        tokio::task::spawn(async move { start_telegram(tg_key, db_clone).await });
-    let api_handle = tokio::task::spawn(async move { start_api(&cfg, db).await });
-
-    let (tg, api) = join!(telegram_handle, api_handle);
-
-    tg??;
-    api??;
+    start_api(&cfg, db).await?;
 
     Ok(())
 }
@@ -110,7 +94,6 @@ async fn main() -> anyhow::Result<()> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     api: ApiConfig,
-    telegram: TelegramConfig,
     mongo: MongoConfig,
 }
 
@@ -119,11 +102,6 @@ pub struct ApiConfig {
     host: String,
     port: u64,
     record_dev_data: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TelegramConfig {
-    api_key: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,9 +119,6 @@ impl Default for ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 4040,
                 record_dev_data: true,
-            },
-            telegram: TelegramConfig {
-                api_key: "<ENTER KEY HERE>".to_string(),
             },
             mongo: MongoConfig {
                 database: "quest".to_string(),

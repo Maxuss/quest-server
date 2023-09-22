@@ -17,7 +17,6 @@ use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::io::ReaderStream;
-use tracing::debug;
 use uuid::Uuid;
 
 // POST models
@@ -44,8 +43,6 @@ pub async fn register(
 
 #[tracing::instrument(skip(db))]
 pub async fn get_user(Path(hash): Path<String>, State(db): State<MongoDatabase>) -> Payload<User> {
-    debug!("Client tried to get id of user with sha256 hash of {hash}");
-
     if hash.len() != 64 {
         return Error(ServerError::INVALID_FORMAT(format!(
             "SHA256 provided hash is not of valid SHA256 length ({} != 64)",
@@ -71,11 +68,9 @@ pub async fn get_avatar(
     Path(id): Path<Uuid>,
     State(db): State<MongoDatabase>,
 ) -> axum::response::Result<impl IntoResponse, ServerError> {
-    debug!("Getting user with ID {id}");
     let id = mongodb::bson::Uuid::from_uuid_1(id);
     let expected_user = db.users.find_one(doc! { "id": id }, None).await?;
     let any = db.users.find_one(doc! {}, None).await?;
-    debug!("User: {expected_user:#?} {any:#?}");
 
     let user = if let Some(user) = expected_user {
         user
@@ -91,13 +86,7 @@ pub async fn get_avatar(
         .await?;
     let body = StreamBody::new(ReaderStream::new(stream.compat()));
 
-    let headers = [
-        (header::CONTENT_TYPE, "image/png"),
-        // (
-        //     header::CONTENT_DISPOSITION,
-        //     "attachment; filename=\"avatar.png\"",
-        // ),
-    ];
+    let headers = [(header::CONTENT_TYPE, "image/png")];
 
     Ok((headers, body))
 }
