@@ -23,6 +23,7 @@ pub async fn start_api(cfg: &ServerConfig, db: MongoDatabase) -> anyhow::Result<
         .route("/user/register", post(register))
         .route("/user/get/:hash", get(get_user))
         .route("/user/avatar/:id", get(get_avatar))
+        .route("/user/register/confirm", post(confirm_register))
         .route("/api", get(openapi::openapi_route))
         .route("/resources/openapi.yml", get(openapi::openapi_yml_route))
         .fallback(handler404)

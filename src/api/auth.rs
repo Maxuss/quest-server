@@ -13,16 +13,32 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use axum::extract::BodyStream;
 use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::io::ReaderStream;
+use tracing::warn;
 use uuid::Uuid;
 
 // POST models
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RegisterUser {
     card_hash: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConfirmUserRegister {
+    user_id: BsonId,
+    telegram_chat_id: i64,
+    username: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RegisteredUser {
+    user_hash: String,
+    user_id: BsonId,
+    telegram_chat_id: i64
 }
 
 #[axum_macros::debug_handler]
@@ -39,6 +55,40 @@ pub async fn register(
     db.reg_stage.insert_one(user.clone(), None).await?;
 
     Payload(user)
+}
+
+#[axum_macros::debug_handler]
+#[tracing::instrument(skip(db))]
+pub async fn confirm_register(
+    State(db): State<MongoDatabase>,
+    Json(data): Json<ConfirmUserRegister>
+) -> Payload<RegisteredUser> {
+    let reg_stage = db.reg_stage.find_one(doc! { "id": data.user_id }, None).await?;
+
+    if let Some(reg) = reg_stage {
+        let registered_user = User {
+            card_hash: reg.card_hash.clone(),
+            id: reg.id.clone(),
+            username: data.username,
+            telegram_chat_id: data.telegram_chat_id
+        };
+        db.users.insert_one(registered_user.clone(), None).await?;
+        Payload(RegisteredUser {
+            user_hash: reg.card_hash.clone(),
+            user_id: reg.id,
+            telegram_chat_id: data.telegram_chat_id
+        })
+    } else {
+        warn!("Attempted to register unknown user.");
+        Err(ServerError::NOT_FOUND("Could not find user".to_owned()))
+    }
+}
+
+pub async fn set_avatar(
+    State(db): State<MongoDatabase>,
+    stream: BodyStream
+) -> Payload<bool> {
+    Payload(true)
 }
 
 #[tracing::instrument(skip(db))]

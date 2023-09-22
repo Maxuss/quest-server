@@ -30,6 +30,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/RegStageUser"
           description: Неверные данные предоставлены/пользователь уже зарегистрирован
+  /user/register/confirm:
+    post:
+      tags:
+        - user
+      summary: Подтверждает регистрацию
+      description: Завершает регистрацию для пользователя
+      operationId: userRegisterConfirm
+      requestBody:
+        $ref: "#/components/requestBodies/ConfirmUserRegister"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: Регистрация завершена
+        "404":
+          description: Пользователь не найден
   "/user/get/{hash}":
     get:
       tags:
@@ -86,6 +104,26 @@ paths:
  
 components:
   requestBodies:
+    ConfirmRegisterUser:
+      description: "Подтверждает регистрацию"
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              user_id:
+                type: string
+                format: uuid
+              telegram_chat_id:
+                type: number
+                format: int64
+              username:
+                type: string
+            example:
+              user_id: fc213f1f-18c5-4efe-b583-6371229d8afa
+              telegram_chat_id: 63983468346063983
+              username: maxus
     RegisterUser:
       description: "**SHA256** хэш определенной части карты, который позволяет идентифицировать пользователя"
       required: true
